@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Modal, Alert, Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import * as IntentLauncher from 'expo-intent-launcher';
+import { saveToOutputDir } from '../services/storageService';
 import { theme } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 
 interface SuccessCardProps {
-  /** Headline shown above the file name e.g. "Merged Successfully!" */
   title: string;
   fileName: string;
   fileUri: string;
@@ -20,20 +19,35 @@ interface SuccessCardProps {
 }
 
 const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) => {
-  // Track live name & URI — both update after rename so all actions stay correct
   const [currentName, setCurrentName] = useState(fileName);
   const [currentUri, setCurrentUri] = useState(fileUri);
+  const [fileSize, setFileSize] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(fileName.replace(/\.pdf$/i, ''));
 
-  // ── Open in a native PDF app ──────────────────────────────────────────────
+  // ── Read file size whenever URI changes ─────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await FileSystem.getInfoAsync(currentUri);
+        if (info.exists && (info as any).size !== undefined) {
+          const kb = (info as any).size / 1024;
+          setFileSize(kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb.toFixed(1)} KB`);
+        }
+      } catch {
+        setFileSize(null);
+      }
+    })();
+  }, [currentUri]);
+
+  // ── Open in native PDF app ───────────────────────────────────────────────
   const handleOpen = async () => {
     if (Platform.OS === 'android') {
       try {
         const contentUri = await FileSystem.getContentUriAsync(currentUri);
         await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
           data: contentUri,
-          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+          flags: 1,
           type: 'application/pdf',
         });
       } catch {
@@ -48,7 +62,7 @@ const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) 
     }
   };
 
-  // ── Share via system sheet ────────────────────────────────────────────────
+  // ── Share via system sheet ───────────────────────────────────────────────
   const handleShare = async () => {
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(currentUri, { mimeType: 'application/pdf' });
@@ -57,22 +71,12 @@ const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) 
     }
   };
 
-  // ── Save to device storage ────────────────────────────────────────────────
+  // ── Save to output directory (PdfToolkit folder) ───────────────────────────
   const handleSave = async () => {
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Storage permission is required to save files.');
-        return;
-      }
-      await MediaLibrary.saveToLibraryAsync(currentUri);
-      Alert.alert('Saved!', 'PDF saved to your device storage.');
-    } catch {
-      Alert.alert('Error', 'Could not save file to device.');
-    }
+    await saveToOutputDir(currentUri, currentName);
   };
 
-  // ── Rename file on disk ───────────────────────────────────────────────────
+  // ── Rename on disk ───────────────────────────────────────────────────────
   const confirmRename = async () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
@@ -91,49 +95,36 @@ const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) 
 
   return (
     <View style={styles.card}>
-      {/* ── Header ──────────────────────────────────────────────── */}
+      {/* Header */}
       <View style={styles.iconWrap}>
         <MaterialCommunityIcons name="check-circle" size={56} color={theme.colors.success} />
       </View>
       <Text style={styles.title}>{title}</Text>
 
-      {/* ── File name pill ──────────────────────────────────────── */}
-      <View style={styles.namePill}>
+      {/* File info pill */}
+      <View style={styles.infoPill}>
         <MaterialCommunityIcons name="file-pdf-box" size={18} color={theme.colors.primary} />
-        <Text style={styles.nameText} numberOfLines={1}>{currentName}</Text>
+        <View style={styles.pillText}>
+          <Text style={styles.nameText} numberOfLines={1}>{currentName}</Text>
+          {fileSize && <Text style={styles.sizeText}>{fileSize}</Text>}
+        </View>
       </View>
 
-      {/* ── Open in PDF Viewer CTA ──────────────────────────────── */}
+      {/* Open in PDF Viewer CTA */}
       <TouchableOpacity style={styles.openCta} onPress={handleOpen}>
         <MaterialCommunityIcons name="eye-outline" size={20} color="white" />
         <Text style={styles.openCtaText}>Open in PDF Viewer</Text>
       </TouchableOpacity>
 
-      {/* ── 4 quick actions ─────────────────────────────────────── */}
+      {/* 4 quick actions */}
       <View style={styles.actions}>
-        <ActionBtn
-          icon="pencil-outline" label="Rename"
-          color="#3B82F6" bg="#3B82F620"
-          onPress={() => setRenaming(true)}
-        />
-        <ActionBtn
-          icon="content-save-outline" label="Save"
-          color="#10B981" bg="#10B98120"
-          onPress={handleSave}
-        />
-        <ActionBtn
-          icon="share-variant-outline" label="Share"
-          color="#F59E0B" bg="#F59E0B20"
-          onPress={handleShare}
-        />
-        <ActionBtn
-          icon="close-circle-outline" label="Dismiss"
-          color="#6B7280" bg="#6B728020"
-          onPress={onDismiss}
-        />
+        <ActionBtn icon="pencil-outline"        label="Rename"  color="#3B82F6" bg="#3B82F620" onPress={() => setRenaming(true)} />
+        <ActionBtn icon="content-save-outline"  label="Save"    color="#10B981" bg="#10B98120" onPress={handleSave} />
+        <ActionBtn icon="share-variant-outline" label="Share"   color="#F59E0B" bg="#F59E0B20" onPress={handleShare} />
+        <ActionBtn icon="close-circle-outline"  label="Dismiss" color="#6B7280" bg="#6B728020" onPress={onDismiss} />
       </View>
 
-      {/* ── Rename modal ────────────────────────────────────────── */}
+      {/* Rename Modal */}
       <Modal visible={renaming} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
@@ -162,12 +153,9 @@ const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) 
   );
 };
 
-// ── Small helper sub-component ───────────────────────────────────────────────
 const ActionBtn = ({
   icon, label, color, bg, onPress,
-}: {
-  icon: string; label: string; color: string; bg: string; onPress: () => void;
-}) => (
+}: { icon: string; label: string; color: string; bg: string; onPress: () => void }) => (
   <TouchableOpacity style={styles.actionBtn} onPress={onPress}>
     <View style={[styles.actionIcon, { backgroundColor: bg }]}>
       <MaterialCommunityIcons name={icon as any} size={24} color={color} />
@@ -176,33 +164,28 @@ const ActionBtn = ({
   </TouchableOpacity>
 );
 
-// ── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   card: {
-    margin: spacing.lg,
-    marginTop: spacing.xxl,
+    margin: spacing.lg, marginTop: spacing.xxl,
     backgroundColor: theme.colors.surface,
-    borderRadius: 24,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderRadius: 24, padding: spacing.xl,
+    borderWidth: 1, borderColor: theme.colors.border,
     alignItems: 'center',
   },
   iconWrap: { marginBottom: spacing.sm },
   title: {
-    color: theme.colors.text,
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: spacing.lg,
-    textAlign: 'center',
+    color: theme.colors.text, fontSize: 22, fontWeight: 'bold',
+    marginBottom: spacing.lg, textAlign: 'center',
   },
-  namePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+  infoPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: theme.colors.surfaceSecondary,
-    borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     marginBottom: spacing.lg, width: '100%',
   },
-  nameText: { flex: 1, color: theme.colors.text, fontSize: 14, fontWeight: '500' },
+  pillText: { flex: 1 },
+  nameText: { color: theme.colors.text, fontSize: 14, fontWeight: '500' },
+  sizeText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
   openCta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, backgroundColor: theme.colors.primary,
@@ -217,7 +200,6 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: spacing.sm },
   actionIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   actionLabel: { color: theme.colors.text, fontSize: 12, fontWeight: '500' },
-  // Modal
   overlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center', alignItems: 'center', padding: spacing.xl,

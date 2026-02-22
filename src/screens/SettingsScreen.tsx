@@ -1,17 +1,21 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
+import { getOutputDirUri, changeOutputDir, clearOutputDir } from '../services/storageService';
 
-const SettingsItem = ({ icon, label, value, onValueChange, type = 'switch', onPress, theme }: any) => {
+const SettingsItem = ({ icon, label, value, onValueChange, type = 'switch', onPress, theme, subtitle }: any) => {
   return (
     <View style={styles.item}>
       <View style={styles.itemLeft}>
         <View style={[styles.iconContainer, { backgroundColor: theme.surfaceSecondary }]}>
           <MaterialCommunityIcons name={icon} size={22} color={theme.text} />
         </View>
-        <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
+        <View>
+          <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
+          {subtitle ? <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text> : null}
+        </View>
       </View>
       {type === 'switch' ? (
         <Switch
@@ -32,26 +36,48 @@ const SettingsItem = ({ icon, label, value, onValueChange, type = 'switch', onPr
 const SettingsScreen = () => {
   const { theme, isDark, toggleTheme } = useAppTheme();
   const [notifications, setNotifications] = React.useState(true);
+  const [outputDirSet, setOutputDirSet] = useState(false);
+
+  useEffect(() => {
+    getOutputDirUri().then(uri => setOutputDirSet(!!uri));
+  }, []);
+
+  const handleChangeOutputFolder = async () => {
+    await changeOutputDir();
+    // Re-check after user picks
+    setTimeout(async () => {
+      const uri = await getOutputDirUri();
+      setOutputDirSet(!!uri);
+    }, 2000);
+  };
+
+  const handleResetOutputFolder = () => {
+    Alert.alert(
+      'Reset Output Folder',
+      'This will clear your saved output folder. You will be prompted to choose again on next save.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset', style: 'destructive',
+          onPress: async () => { await clearOutputDir(); setOutputDirSet(false); },
+        },
+      ],
+    );
+  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]} contentContainerStyle={styles.content}>
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.primary }]}>Appearance</Text>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <SettingsItem 
-            icon="weather-night" 
-            label="Dark Mode" 
-            value={isDark} 
-            onValueChange={toggleTheme} 
-            theme={theme}
+          <SettingsItem
+            icon="weather-night" label="Dark Mode"
+            value={isDark} onValueChange={toggleTheme} theme={theme}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SettingsItem 
-            icon="bell-outline" 
-            label="Notifications" 
-            value={notifications} 
-            onValueChange={setNotifications} 
-            theme={theme}
+          <SettingsItem
+            icon="bell-outline" label="Notifications"
+            value={notifications} onValueChange={setNotifications} theme={theme}
           />
         </View>
       </View>
@@ -59,18 +85,30 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.primary }]}>Storage</Text>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <SettingsItem 
-            icon="folder-outline" 
-            label="Save Location" 
-            type="chevron" 
-            onPress={() => Alert.alert('Save Location', 'Internal App Storage')}
+          <SettingsItem
+            icon="folder-outline"
+            label="Output Folder"
+            subtitle={outputDirSet ? 'Folder selected ✓' : 'Not set — tap Save in any tool to set'}
+            type="chevron"
+            onPress={handleChangeOutputFolder}
             theme={theme}
           />
+          {outputDirSet && (
+            <>
+              <View style={[styles.divider, { backgroundColor: theme.border }]} />
+              <SettingsItem
+                icon="folder-remove-outline"
+                label="Reset Output Folder"
+                subtitle="Choose a different folder next save"
+                type="chevron"
+                onPress={handleResetOutputFolder}
+                theme={theme}
+              />
+            </>
+          )}
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SettingsItem 
-            icon="delete-outline" 
-            label="Clear Recent Files" 
-            type="chevron" 
+          <SettingsItem
+            icon="delete-outline" label="Clear Recent Files" type="chevron"
             onPress={() => Alert.alert('Clear Recents', 'This will clear your recent file history.')}
             theme={theme}
           />
@@ -80,20 +118,14 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.primary }]}>About</Text>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <SettingsItem 
-            icon="information-outline" 
-            label="Version" 
-            type="chevron" 
-            onPress={() => Alert.alert('PdfTools', 'Version 1.0.0')}
-            theme={theme}
+          <SettingsItem
+            icon="information-outline" label="Version" type="chevron"
+            onPress={() => Alert.alert('PdfTools', 'Version 1.0.0')} theme={theme}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <SettingsItem 
-            icon="shield-check-outline" 
-            label="Privacy Policy" 
-            type="chevron" 
-            onPress={() => Alert.alert('Privacy', 'Your files stay on your device.')}
-            theme={theme}
+          <SettingsItem
+            icon="shield-check-outline" label="Privacy Policy" type="chevron"
+            onPress={() => Alert.alert('Privacy', 'Your files stay on your device.')} theme={theme}
           />
         </View>
       </View>
@@ -146,6 +178,10 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
+  },
+  subtitle: {
+    fontSize: 12,
+    marginTop: 1,
   },
   divider: {
     height: 1,

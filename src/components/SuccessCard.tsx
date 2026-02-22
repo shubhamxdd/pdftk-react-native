@@ -8,37 +8,45 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { saveToOutputDir } from '../services/storageService';
-import { theme } from '../theme/colors';
+import { addRecentFile, ToolType } from '../services/recentFilesService';
+import { useAppTheme } from '../context/ThemeContext';
 import { spacing } from '../theme/spacing';
 
 interface SuccessCardProps {
   title: string;
   fileName: string;
   fileUri: string;
+  fileSize?: number;   // optional — if not passed, read from disk
+  toolType?: ToolType; // for recents tracking
   onDismiss: () => void;
 }
 
-const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) => {
+const SuccessCard = ({ title, fileName, fileUri, fileSize, toolType = 'merge', onDismiss }: SuccessCardProps) => {
+  const { theme: themeColors } = useAppTheme();
   const [currentName, setCurrentName] = useState(fileName);
   const [currentUri, setCurrentUri] = useState(fileUri);
-  const [fileSize, setFileSize] = useState<string | null>(null);
+  const [fileSizeStr, setFileSizeStr] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(fileName.replace(/\.pdf$/i, ''));
 
-  // ── Read file size whenever URI changes ─────────────────────────────────
+  // ── Read file size + record in recents ──────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
         const info = await FileSystem.getInfoAsync(currentUri);
-        if (info.exists && (info as any).size !== undefined) {
-          const kb = (info as any).size / 1024;
-          setFileSize(kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb.toFixed(1)} KB`);
+        const size = fileSize ?? (info.exists ? (info as any).size ?? 0 : 0);
+        if (size > 0) {
+          const kb = size / 1024;
+          setFileSizeStr(kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb.toFixed(1)} KB`);
         }
+        // Record in recents (non-blocking)
+        addRecentFile({ name: fileName, uri: fileUri, toolType, size: fileSize ?? (info as any).size ?? 0 });
       } catch {
-        setFileSize(null);
+        // ignore
       }
     })();
-  }, [currentUri]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Open in native PDF app ───────────────────────────────────────────────
   const handleOpen = async () => {
@@ -94,55 +102,55 @@ const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) 
   };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
       {/* Header */}
       <View style={styles.iconWrap}>
-        <MaterialCommunityIcons name="check-circle" size={56} color={theme.colors.success} />
+        <MaterialCommunityIcons name="check-circle" size={56} color={themeColors.success} />
       </View>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={[styles.title, { color: themeColors.text }]}>{title}</Text>
 
       {/* File info pill */}
-      <View style={styles.infoPill}>
-        <MaterialCommunityIcons name="file-pdf-box" size={18} color={theme.colors.primary} />
+      <View style={[styles.infoPill, { backgroundColor: themeColors.surfaceSecondary }]}>
+        <MaterialCommunityIcons name="file-pdf-box" size={18} color={themeColors.primary} />
         <View style={styles.pillText}>
-          <Text style={styles.nameText} numberOfLines={1}>{currentName}</Text>
-          {fileSize && <Text style={styles.sizeText}>{fileSize}</Text>}
+          <Text style={[styles.nameText, { color: themeColors.text }]} numberOfLines={1}>{currentName}</Text>
+          {fileSizeStr && <Text style={[styles.sizeText, { color: themeColors.textSecondary }]}>{fileSizeStr}</Text>}
         </View>
       </View>
 
       {/* Open in PDF Viewer CTA */}
-      <TouchableOpacity style={styles.openCta} onPress={handleOpen}>
+      <TouchableOpacity style={[styles.openCta, { backgroundColor: themeColors.primary }]} onPress={handleOpen}>
         <MaterialCommunityIcons name="eye-outline" size={20} color="white" />
         <Text style={styles.openCtaText}>Open in PDF Viewer</Text>
       </TouchableOpacity>
 
       {/* 4 quick actions */}
       <View style={styles.actions}>
-        <ActionBtn icon="pencil-outline"        label="Rename"  color="#3B82F6" bg="#3B82F620" onPress={() => setRenaming(true)} />
-        <ActionBtn icon="content-save-outline"  label="Save"    color="#10B981" bg="#10B98120" onPress={handleSave} />
-        <ActionBtn icon="share-variant-outline" label="Share"   color="#F59E0B" bg="#F59E0B20" onPress={handleShare} />
-        <ActionBtn icon="close-circle-outline"  label="Dismiss" color="#6B7280" bg="#6B728020" onPress={onDismiss} />
+        <ActionBtn icon="pencil-outline"        label="Rename"  color="#3B82F6" bg="#3B82F620" labelColor={themeColors.text} onPress={() => setRenaming(true)} />
+        <ActionBtn icon="content-save-outline"  label="Save"    color="#10B981" bg="#10B98120" labelColor={themeColors.text} onPress={handleSave} />
+        <ActionBtn icon="share-variant-outline" label="Share"   color="#F59E0B" bg="#F59E0B20" labelColor={themeColors.text} onPress={handleShare} />
+        <ActionBtn icon="close-circle-outline"  label="Dismiss" color="#6B7280" bg="#6B728020" labelColor={themeColors.text} onPress={onDismiss} />
       </View>
 
       {/* Rename Modal */}
       <Modal visible={renaming} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Rename File</Text>
+            <Text style={styles.modalTitle}>{currentName.replace(/\.pdf$/i,'')}</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: themeColors.surfaceSecondary, color: themeColors.text, borderColor: themeColors.border }]}
               value={newName}
               onChangeText={setNewName}
               autoFocus
               selectTextOnFocus
               placeholder="Enter file name"
-              placeholderTextColor={theme.colors.textSecondary}
+              placeholderTextColor={themeColors.textSecondary}
             />
             <View style={styles.modalRow}>
-              <TouchableOpacity style={styles.btnCancel} onPress={() => setRenaming(false)}>
-                <Text style={{ color: theme.colors.textSecondary, fontWeight: '600' }}>Cancel</Text>
+              <TouchableOpacity style={[styles.btnCancel, { backgroundColor: themeColors.surfaceSecondary }]} onPress={() => setRenaming(false)}>
+                <Text style={{ color: themeColors.textSecondary, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.btnConfirm} onPress={confirmRename}>
+              <TouchableOpacity style={[styles.btnConfirm, { backgroundColor: themeColors.primary }]} onPress={confirmRename}>
                 <Text style={{ color: 'white', fontWeight: '600' }}>Rename</Text>
               </TouchableOpacity>
             </View>
@@ -154,41 +162,39 @@ const SuccessCard = ({ title, fileName, fileUri, onDismiss }: SuccessCardProps) 
 };
 
 const ActionBtn = ({
-  icon, label, color, bg, onPress,
-}: { icon: string; label: string; color: string; bg: string; onPress: () => void }) => (
+  icon, label, color, bg, onPress, labelColor,
+}: { icon: string; label: string; color: string; bg: string; onPress: () => void; labelColor: string }) => (
   <TouchableOpacity style={styles.actionBtn} onPress={onPress}>
     <View style={[styles.actionIcon, { backgroundColor: bg }]}>
       <MaterialCommunityIcons name={icon as any} size={24} color={color} />
     </View>
-    <Text style={styles.actionLabel}>{label}</Text>
+    <Text style={[styles.actionLabel, { color: labelColor }]}>{label}</Text>
   </TouchableOpacity>
 );
 
 const styles = StyleSheet.create({
   card: {
     margin: spacing.lg, marginTop: spacing.xxl,
-    backgroundColor: theme.colors.surface,
     borderRadius: 24, padding: spacing.xl,
-    borderWidth: 1, borderColor: theme.colors.border,
+    borderWidth: 1,
     alignItems: 'center',
   },
   iconWrap: { marginBottom: spacing.sm },
   title: {
-    color: theme.colors.text, fontSize: 22, fontWeight: 'bold',
+    color: '#F0F6FC', fontSize: 22, fontWeight: 'bold',
     marginBottom: spacing.lg, textAlign: 'center',
   },
   infoPill: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: theme.colors.surfaceSecondary,
     borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     marginBottom: spacing.lg, width: '100%',
   },
   pillText: { flex: 1 },
-  nameText: { color: theme.colors.text, fontSize: 14, fontWeight: '500' },
-  sizeText: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
+  nameText: { color: '#F0F6FC', fontSize: 14, fontWeight: '500' },
+  sizeText: { color: '#8B949E', fontSize: 12, marginTop: 2 },
   openCta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, backgroundColor: theme.colors.primary,
+    gap: 8,
     borderRadius: 12, paddingVertical: spacing.md,
     width: '100%', marginBottom: spacing.lg,
   },
@@ -199,29 +205,28 @@ const styles = StyleSheet.create({
   },
   actionBtn: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: spacing.sm },
   actionIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  actionLabel: { color: theme.colors.text, fontSize: 12, fontWeight: '500' },
+  actionLabel: { color: '#F0F6FC', fontSize: 12, fontWeight: '500' },
   overlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center', alignItems: 'center', padding: spacing.xl,
   },
   modalBox: {
-    backgroundColor: theme.colors.surface, borderRadius: 20,
+    borderRadius: 20,
     padding: spacing.xl, width: '100%',
   },
-  modalTitle: { color: theme.colors.text, fontSize: 18, fontWeight: 'bold', marginBottom: spacing.lg },
+  modalTitle: { color: '#F0F6FC', fontSize: 18, fontWeight: 'bold', marginBottom: spacing.lg },
   input: {
-    backgroundColor: theme.colors.surfaceSecondary, color: theme.colors.text,
     borderRadius: 10, padding: spacing.md, fontSize: 16,
-    borderWidth: 1, borderColor: theme.colors.border, marginBottom: spacing.lg,
+    borderWidth: 1, marginBottom: spacing.lg,
   },
   modalRow: { flexDirection: 'row', gap: spacing.md },
   btnCancel: {
     flex: 1, padding: spacing.md, borderRadius: 10,
-    alignItems: 'center', backgroundColor: theme.colors.surfaceSecondary,
+    alignItems: 'center',
   },
   btnConfirm: {
     flex: 1, padding: spacing.md, borderRadius: 10,
-    alignItems: 'center', backgroundColor: theme.colors.primary,
+    alignItems: 'center',
   },
 });
 

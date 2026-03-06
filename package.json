@@ -17,6 +17,7 @@
     "@types/base-64": "^1.0.2",
     "base-64": "^1.0.0",
     "expo": "~54.0.33",
+    "expo-dev-client": "~6.0.20",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.11",

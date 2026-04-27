@@ -8,7 +8,7 @@ import ToolCard from '../components/ToolCard';
 
 const HOME_TOOLS = [
   { id: 'merge', name: 'Merge PDF', icon: 'file-plus', description: 'Combine multiple PDFs into one', color: '#1E293B' },
-  { id: 'split', name: 'Split PDF', icon: 'file-scissors', description: 'Extract pages from a PDF', color: '#1E293B' },
+  { id: 'split', name: 'Split PDF', icon: 'content-cut', description: 'Extract pages from a PDF', color: '#1E293B' },
   { id: 'imageToPdf', name: 'Image to PDF', icon: 'image-plus', description: 'Convert images to PDF docs', color: '#1E293B' },
   { id: 'compress', name: 'Compress PDF', icon: 'file-restore', description: 'Reduce PDF file size', color: '#1E293B' },
 ];

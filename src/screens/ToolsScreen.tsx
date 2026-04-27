@@ -34,6 +34,12 @@ const ALL_TOOLS = [
       { id: 'unlock', name: 'Unlock PDF', icon: 'lock-open', description: 'Remove password protection' },
     ],
   },
+  {
+    title: 'AI Tools',
+    data: [
+      { id: 'talk', name: 'Talk with PDF', icon: 'robot', description: 'Chat with your PDF using AI' },
+    ],
+  },
 ];
 
 const ToolsScreen = () => {
@@ -62,6 +68,7 @@ const ToolsScreen = () => {
               'reorder': 'ReorderPdf',
               'lock': 'LockPdf',
               'unlock': 'UnlockPdf',
+              'talk': 'TalkWithPdf',
             };
             if (routes[item.id]) {
               navigation.navigate(routes[item.id]);

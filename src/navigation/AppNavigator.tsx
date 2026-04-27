@@ -12,6 +12,7 @@ import PdfToImgScreen from '../screens/tools/PdfToImgScreen';
 import ReorderPdfScreen from '../screens/tools/ReorderPdfScreen';
 import LockPdfScreen from '../screens/tools/LockPdfScreen';
 import UnlockPdfScreen from '../screens/tools/UnlockPdfScreen';
+import TalkWithPdfScreen from '../screens/tools/TalkWithPdfScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -75,6 +76,11 @@ const AppNavigator = () => {
           name="UnlockPdf" 
           component={UnlockPdfScreen} 
           options={{ headerShown: true, title: 'Unlock PDF' }} 
+        />
+        <Stack.Screen 
+          name="TalkWithPdf" 
+          component={TalkWithPdfScreen} 
+          options={{ headerShown: true, title: 'Talk with PDF' }} 
         />
       </Stack.Navigator>
     </NavigationContainer>
